@@ -9,7 +9,8 @@ import os
 import pandas as pd
 import re
 import subprocess
-
+import numpy as np
+import nibabel as nb
 ########################################################################################################################
 ########################################################################################################################
 ######################################################extract/manage data###############################################
@@ -38,7 +39,7 @@ def create_symbolic_links():
 
 def import_csv_files(data_path):
     #here we import all csv files from the former longitudinal csv files and merge them into one big file
-    file_path = '/storage/DataTempVolatile/Friedrich/MATLAB-Drive/MB/Longitudinal/data/'
+    file_path = '/storage/DataTempVolatile/Friedrich/MATLAB-Drive/MB/Longitudinal/'
     file_list = sorted([s for s in os.listdir(file_path) if 'long_raw' in s])
     df_all = pd.concat(
         [
@@ -52,8 +53,7 @@ def import_csv_files(data_path):
     df_all.to_csv("longitudinal_combined.csv", index=False)
 
 def merge_pons_masks():
-    import os
-    import subprocess
+
 
     # --- Setup ---
     basepath = "/storage/DataTempVolatile/Friedrich/final/Longitudinal/pons_refs_imcs_delcode_longitudinal/"
@@ -90,15 +90,49 @@ def merge_pons_masks():
 ########################################################################################################################
 
 
-def extract_contrast_volume():
+def extract_contrast_volume(all_data):
     # we calculate SN volume and contrast from the processed files
-
-    all_files = os.listdir('/DataTempVolatile/Friedrich/final/all_images_link/raw/img')
-    lc_masks = os.listdir('/DataTempVolatile/Friedrich/final/all_images_link/LC_masks_Max')
-    all_files, lc_masks = report_missing(all_files, lc_masks) # check what data we have
+    filesdir='/DataTempVolatile/Friedrich/final/all_images_link/raw/img/'
+    maskdir='/DataTempVolatile/Friedrich/final/all_images_link/LC_masks_Max/'
+    all_files = os.listdir(filesdir)
+    lc_masks = os.listdir(maskdir)
+    all_files, lc_masks = report_missing(all_files, lc_masks) # check what data we have and only select the overlapping
     # we need to extract the relevant names and time points and loop over the subjects and time points to calculate SN
     # volume and contrast
+    all_data['LC_contrast']=np.nan
+    all_data['LC_volume'] = np.nan
+    all_data['LC_max']=np.nan
 
+
+    for idx in all_data.index:
+
+        #identifying the subject
+        subject=all_data[idx,'Subject']
+        month=all_data[idx,'visnam']
+
+        #preallocating the different names
+        main_name=filesdir+subject+'_'+month+'.nii'
+        maskname = maskdir + subject + '_' + month + '_LC.nii'
+        if os.path.exists(main_name)&os.path.exists(maskname):
+            ponsname=maskdir+subject+'_'+month+'Pons.nii'
+
+            #loading and preparing all relevant data
+            main_img=nb.load(main_name).get_fdata()
+            mask=nb.load(maskname).get_fdata()
+            pons=nb.load(ponsname).get_fdata()
+
+            mask[mask < 0.2] = 0
+            pons[pons < 0.2] = 0
+
+            medval=np.median(main[mask>0])
+            maxval=np.max(main[mask>0])
+            ponsval=np.median(main[pons>0])
+
+            all_data[idx,'LC_volume'] = round(mask.sum())*0.75*0.75*0.75
+            all_data[idx,'LC_contrast'] = (medval-ponsval)/ponsval
+            all_data[idx, 'max'] = (maxval - ponsval) / ponsval
+
+    return all_data
 
 def report_missing(all_files, lc_masks):
     # we try to find missing data in Max's LC data and all available data and report it for QC and for our friend to know!
@@ -137,9 +171,9 @@ def report_missing(all_files, lc_masks):
 
 def main():
     #setting everything up
-
+    all_data=pd.read_csv('data/longitudinal_combined.csv')
     create_symbolic_links()
-    data_path = "/DataTempVolatile/Friedrich/MATLAB-Drive/MB/Longitudinal/Python_project_extract_LC_data/data/longitudinal_combined.csv"
+    data_path = "/DataTempVolatile/Friedrich/MATLAB-Drive/MB/Longitudinal/Python_project_extract_LC_data/longitudinal_combined.csv"
 
     if os.path.exists(data_path):
         pass
