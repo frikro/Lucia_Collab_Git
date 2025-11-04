@@ -5,19 +5,15 @@
 ######################################################setting up########################################################
 ########################################################################################################################
 ########################################################################################################################
-import os
-import pandas as pd
-from stats_functions import *
 from preprocess_functions import *
-
+import pandas as pd
 def main():
     #setting everything up
     all_data=pd.read_csv('longitudinal_combined.csv')
     preprocess_wrapper()
 
 
-
-    extract_contrast_volume(all_data)
+    #extract_contrast_volume(all_data)
 
 if __name__ == "__main__":
     main()
